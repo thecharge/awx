@@ -110,7 +110,6 @@ debtcollector==1.15.0     # via oslo.config, oslo.utils, python-designateclient,
 defusedxml==0.4.1         # via python-saml
 deprecation==2.0          # via openstacksdk
 django-auth-ldap==1.2.8
-django-celery==3.2.2
 django-crum==0.7.2
 django-extensions==2.0.0
 django-jsonfield==1.0.1
