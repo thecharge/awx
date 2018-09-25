@@ -1,6 +1,5 @@
 import logging
 import importlib
-import inspect
 import sys
 import traceback
 
@@ -37,8 +36,6 @@ class TaskWorker(BaseWorker):
             _call = getattr(module, target, None)
         return _call
 
-
-
     def run_callable(self, body):
         '''
         Given some AMQP message, import the correct Python code and run it.
@@ -47,10 +44,13 @@ class TaskWorker(BaseWorker):
         uuid = body.get('uuid', '<unknown>')
         args = body.get('args', [])
         kwargs = body.get('kwargs', {})
-        _call = TaskWorker.resolve_callable(task).wrapped
-        if not inspect.isfunction(_call):
-            # if the callable is a class, e.g., RunJob; instantiate an
-            # instance of class and return its `run()` method
+        _call = TaskWorker.resolve_callable(task)
+        if hasattr(_call, 'wrapped'):
+            # the callable is a wrapped function
+            _call = _call.wrapped
+        else:
+            # the callable is a class, e.g., RunJob; instantiate and
+            # return its `run()` method
             _call = _call().run
         # don't print kwargs, they often contain launch-time secrets
         logger.debug('task {} starting {}(*{})'.format(uuid, task, args))

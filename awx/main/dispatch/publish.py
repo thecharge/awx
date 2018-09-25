@@ -24,7 +24,7 @@ def task(queue=None, exchange_type=None):
 
     ...or classes that define a `run` method:
 
-    @task()
+    @task
     class Adder:
         def run(self, a, b):
             return a + b
@@ -47,30 +47,26 @@ def task(queue=None, exchange_type=None):
     def announce():
         print "Run this everywhere!"
     """
-    class wrapped:
-        def __init__(self, f):
-            setattr(f, 'apply_async', self.apply_async)
-            setattr(f, 'delay', self.delay)
-            self.wrapped = f
-            self.queue = queue
 
-        def delay(self, *args, **kwargs):
-            return self.apply_async(args, kwargs)
+    class TaskBase(object):
 
-        @property
-        def name(self):
-            return serialize_task(self.wrapped)
+        queue = None
 
-        def apply_async(self, args=None, kwargs=None, queue=None, uuid=None, **kw):
+        @classmethod
+        def delay(cls, *args, **kwargs):
+            return cls.apply_async(args, kwargs)
+
+        @classmethod
+        def apply_async(cls, args=None, kwargs=None, queue=None, uuid=None, **kw):
             task_id = uuid or str(uuid4())
             args = args or []
             kwargs = kwargs or {}
-            queue = queue or self.queue or settings.CELERY_DEFAULT_QUEUE
+            queue = queue or getattr(cls.queue, 'im_func', cls.queue) or settings.CELERY_DEFAULT_QUEUE
             obj = {
                 'uuid': task_id,
                 'args': args,
                 'kwargs': kwargs,
-                'task': self.name
+                'task': cls.name
             }
             obj.update(**kw)
             if callable(queue):
@@ -80,7 +76,7 @@ def task(queue=None, exchange_type=None):
                     exchange = Exchange(queue, type=exchange_type or 'direct')
                     producer = Producer(conn)
                     logger.debug('publish {}({}, queue={})'.format(
-                        self.name,
+                        cls.name,
                         task_id,
                         queue
                     ))
@@ -93,24 +89,49 @@ def task(queue=None, exchange_type=None):
                                      routing_key=queue)
             return (obj, queue)
 
+    if inspect.isclass(queue):
+        # if the wrapped object is a class-based task,
+        # add the TaskBase mixin so it has apply_async() and delay()
+        ns = dict(queue.__dict__)
+        ns['name'] = serialize_task(queue)
+        return type(
+            queue.__name__,
+            tuple(list(queue.__bases__) + [TaskBase]),
+            ns
+        )
+
+    # it's a function-based task, so return the wrapped/decorated
+    # function
+    class wrapped_func(TaskBase):
+
+        def __init__(self, f=None):
+            if inspect.isclass(f) or f is None:
+                # Print a helpful error message if the @task decorator is
+                # used incorrectly
+                if f is None:
+                    err = 'use @task(), not @task'
+                    source = inspect.getsourcefile(queue)
+                    lines, lnum = inspect.findsource(queue)
+                    lnum += 1
+                else:
+                    err = 'use @task, not @task()'
+                    source = inspect.getsourcefile(f)
+                    lines, lnum = inspect.findsource(f)
+                msg = [
+                    source,
+                    '{} {}    # <--- {}'.format(
+                        lnum - 1, lines[lnum - 1].strip(), err
+                    ),
+                    '{} {}'.format(lnum, lines[lnum].strip())
+                ]
+                raise RuntimeError('\n'.join(msg))
+            setattr(f, 'apply_async', self.apply_async)
+            setattr(f, 'delay', self.delay)
+            self.__class__.name = serialize_task(f)
+            self.__class__.queue = queue
+            self.wrapped = f
+
         def __call__(self, *args, **kwargs):
-            # Decorator magic ahead...
-            if inspect.isclass(self.wrapped):
-                # If this decorator is wrapping a _class_, then the function
-                # we're wrapping here is __init__; in this situation, we want
-                # to return the instantiated instance (what __init__ of the
-                # wrapped class would return if you called it)
-                #
-                # @task()
-                # class SomeTask:
-                #     def run(self, a, b):
-                #         return a + b
-                #
-                # task = SomeTask()  <--- this wrapped callable
-                # task.run(1, 1)
-                return self.wrapped()
-            # Otherwise, we're just wrapping a function, and we want to just call
-            # the function itself
             return self.wrapped(*args, **kwargs)
 
-    return wrapped
+    return wrapped_func

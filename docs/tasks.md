@@ -72,7 +72,7 @@ Tasks are defined in AWX's source code, and generally live in the
 
 ...or classes that define a `run` method:
 
-    @task()
+    @task
     class Adder:
         def run(self, a, b):
             return a + b

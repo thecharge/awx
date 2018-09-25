@@ -355,7 +355,7 @@ def cluster_node_heartbeat():
                                     this_inst.version))
             # Shutdown signal will set the capacity to zero to ensure no Jobs get added to this instance.
             # The heartbeat task will reset the capacity to the system capacity after upgrade.
-            stop_local_services(['uwsgi', 'dispatcher', 'callback'], communicate=False)
+            stop_local_services(communicate=False)
             raise RuntimeError("Shutting down.")
     for other_inst in lost_instances:
         try:
@@ -1067,7 +1067,7 @@ class BaseTask(object):
         return ''
 
 
-@task()
+@task
 class RunJob(BaseTask):
     '''
     Celery task to run a job using ansible-playbook.
@@ -1118,7 +1118,7 @@ class RunJob(BaseTask):
         Build a dictionary of passwords for SSH private key, SSH user, sudo/su
         and ansible-vault.
         '''
-        passwords = BaseTask.build_passwords(self, job, **kwargs)
+        passwords = super(RunJob, self).build_passwords(job, **kwargs)
         cred = job.get_deprecated_credential('ssh')
         if cred:
             for field in ('ssh_key_unlock', 'ssh_password', 'become_password'):
@@ -1168,7 +1168,7 @@ class RunJob(BaseTask):
                 settings.AWX_ANSIBLE_CALLBACK_PLUGINS:
             plugin_dirs.extend(settings.AWX_ANSIBLE_CALLBACK_PLUGINS)
         plugin_path = ':'.join(plugin_dirs)
-        env = BaseTask.build_env(self, job, **kwargs)
+        env = super(RunJob, self).build_env(job, **kwargs)
         env = self.add_ansible_venv(job.ansible_virtualenv_path, env, add_awx_lib=kwargs.get('isolated', False), **kwargs)
         # Set environment variables needed for inventory and job event
         # callbacks to work.
@@ -1334,7 +1334,7 @@ class RunJob(BaseTask):
         return getattr(settings, 'JOB_RUN_IDLE_TIMEOUT', None)
 
     def get_password_prompts(self, **kwargs):
-        d = BaseTask.get_password_prompts(self, **kwargs)
+        d = super(RunJob, self).get_password_prompts(**kwargs)
         d[re.compile(r'Enter passphrase for .*:\s*?$', re.M)] = 'ssh_key_unlock'
         d[re.compile(r'Bad passphrase, try again for .*:\s*?$', re.M)] = ''
         for method in PRIVILEGE_ESCALATION_METHODS:
@@ -1392,7 +1392,7 @@ class RunJob(BaseTask):
                     raise
 
     def final_run_hook(self, job, status, **kwargs):
-        BaseTask.final_run_hook(self, job, status, **kwargs)
+        super(RunJob, self).final_run_hook(job, status, **kwargs)
         if job.use_fact_cache:
             job.finish_job_fact_cache(
                 kwargs['private_data_dir'],
@@ -1421,7 +1421,7 @@ class RunJob(BaseTask):
             update_inventory_computed_fields.delay(inventory.id, True)
 
 
-@task()
+@task
 class RunProjectUpdate(BaseTask):
 
     model = ProjectUpdate
@@ -1459,7 +1459,8 @@ class RunProjectUpdate(BaseTask):
         Build a dictionary of passwords for SSH private key unlock and SCM
         username/password.
         '''
-        passwords = BaseTask.build_passwords(self, project_update, **kwargs)
+        passwords = super(RunProjectUpdate, self).build_passwords(project_update,
+                                                                  **kwargs)
         if project_update.credential:
             passwords['scm_key_unlock'] = decrypt_field(project_update.credential, 'ssh_key_unlock')
             passwords['scm_username'] = project_update.credential.username
@@ -1470,7 +1471,7 @@ class RunProjectUpdate(BaseTask):
         '''
         Build environment dictionary for ansible-playbook.
         '''
-        env = BaseTask.build_env(self, project_update, **kwargs)
+        env = super(RunProjectUpdate, self).build_env(project_update, **kwargs)
         env = self.add_ansible_venv(settings.ANSIBLE_VENV_PATH, env)
         env['ANSIBLE_RETRY_FILES_ENABLED'] = str(False)
         env['ANSIBLE_ASK_PASS'] = str(False)
@@ -1608,7 +1609,7 @@ class RunProjectUpdate(BaseTask):
         return output_replacements
 
     def get_password_prompts(self, **kwargs):
-        d = BaseTask.get_password_prompts(self, **kwargs)
+        d = super(RunProjectUpdate, self).get_password_prompts(**kwargs)
         d[re.compile(r'Username for.*:\s*?$', re.M)] = 'scm_username'
         d[re.compile(r'Password for.*:\s*?$', re.M)] = 'scm_password'
         d[re.compile(r'Password:\s*?$', re.M)] = 'scm_password'
@@ -1753,7 +1754,7 @@ class RunProjectUpdate(BaseTask):
         return getattr(settings, 'AWX_PROOT_ENABLED', False)
 
 
-@task()
+@task
 class RunInventoryUpdate(BaseTask):
 
     model = InventoryUpdate
@@ -1973,7 +1974,7 @@ class RunInventoryUpdate(BaseTask):
         This dictionary is used by `build_env`, below.
         """
         # Run the superclass implementation.
-        passwords = BaseTask.build_passwords(self, inventory_update, **kwargs)
+        passwords = super(RunInventoryUpdate, self).build_passwords(inventory_update, **kwargs)
 
         # Take key fields from the credential in use and add them to the
         # passwords dictionary.
@@ -1993,7 +1994,8 @@ class RunInventoryUpdate(BaseTask):
         to the inventory update script is set up. In particular, this is how
         inventory update is aware of its proper credentials.
         """
-        env = BaseTask.build_env(self, inventory_update, **kwargs)
+        env = super(RunInventoryUpdate, self).build_env(inventory_update,
+                                                        **kwargs)
         env = self.add_awx_venv(env)
         # Pass inventory source ID to inventory script.
         env['INVENTORY_SOURCE_ID'] = str(inventory_update.inventory_source_id)
@@ -2160,7 +2162,7 @@ class RunInventoryUpdate(BaseTask):
                 raise
 
 
-@task()
+@task
 class RunAdHocCommand(BaseTask):
     '''
     Celery task to run an ad hoc command using ansible.
@@ -2197,7 +2199,7 @@ class RunAdHocCommand(BaseTask):
         Build a dictionary of passwords for SSH private key, SSH user and
         sudo/su.
         '''
-        passwords = BaseTask.build_passwords(self, ad_hoc_command, **kwargs)
+        passwords = super(RunAdHocCommand, self).build_passwords(ad_hoc_command, **kwargs)
         creds = ad_hoc_command.credential
         if creds:
             for field in ('ssh_key_unlock', 'ssh_password', 'become_password'):
@@ -2214,7 +2216,7 @@ class RunAdHocCommand(BaseTask):
         Build environment dictionary for ansible.
         '''
         plugin_dir = self.get_path_to('..', 'plugins', 'callback')
-        env = BaseTask.build_env(self, ad_hoc_command, **kwargs)
+        env = super(RunAdHocCommand, self).build_env(ad_hoc_command, **kwargs)
         env = self.add_ansible_venv(settings.ANSIBLE_VENV_PATH, env)
         # Set environment variables needed for inventory and ad hoc event
         # callbacks to work.
@@ -2308,7 +2310,7 @@ class RunAdHocCommand(BaseTask):
         return getattr(settings, 'JOB_RUN_IDLE_TIMEOUT', None)
 
     def get_password_prompts(self, **kwargs):
-        d = BaseTask.get_password_prompts(self, **kwargs)
+        d = super(RunAdHocCommand, self).get_password_prompts(**kwargs)
         d[re.compile(r'Enter passphrase for .*:\s*?$', re.M)] = 'ssh_key_unlock'
         d[re.compile(r'Bad passphrase, try again for .*:\s*?$', re.M)] = ''
         for method in PRIVILEGE_ESCALATION_METHODS:
@@ -2326,7 +2328,7 @@ class RunAdHocCommand(BaseTask):
         return getattr(settings, 'AWX_PROOT_ENABLED', False)
 
 
-@task()
+@task
 class RunSystemJob(BaseTask):
 
     model = SystemJob
@@ -2354,7 +2356,8 @@ class RunSystemJob(BaseTask):
         return args
 
     def build_env(self, instance, **kwargs):
-        env = BaseTask.build_env(self, instance, **kwargs)
+        env = super(RunSystemJob, self).build_env(instance,
+                                                  **kwargs)
         env = self.add_awx_venv(env)
         return env
 
