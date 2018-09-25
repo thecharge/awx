@@ -9,7 +9,7 @@ import pytest
 
 from awx.main.models import Job, WorkflowJob, Instance
 from awx.main.dispatch import reaper
-from awx.main.dispatch.pool import WorkerPool, AutoscalePool
+from awx.main.dispatch.pool import PoolWorker, WorkerPool, AutoscalePool
 from awx.main.dispatch.publish import task
 from awx.main.dispatch.worker import BaseWorker, TaskWorker
 
@@ -53,6 +53,54 @@ class SlowResultWriter(BaseWorker):
     def perform_work(self, body, result_queue):
         time.sleep(3)
         super(SlowResultWriter, self).perform_work(body, result_queue)
+
+
+class TestPoolWorker:
+
+    def setup_method(self, test_method):
+        self.worker = PoolWorker(1000, self.tick, tuple())
+
+    def tick(self):
+        self.worker.finished.put(self.worker.queue.get()['uuid'])
+        time.sleep(.5)
+
+    def test_qsize(self):
+        assert self.worker.qsize == 0
+        for i in range(3):
+            self.worker.put({'task': 'abc123'})
+        assert self.worker.qsize == 3
+
+    def test_put(self):
+        assert len(self.worker.managed_tasks) == 0
+        assert self.worker.messages_finished == 0
+        self.worker.put({'task': 'abc123'})
+
+        assert len(self.worker.managed_tasks) == 1
+        assert self.worker.messages_sent == 1
+
+    def test_managed_tasks(self):
+        self.worker.put({'task': 'abc123'})
+        self.worker.calculate_managed_tasks()
+        assert len(self.worker.managed_tasks) == 1
+
+        self.tick()
+        self.worker.calculate_managed_tasks()
+        assert len(self.worker.managed_tasks) == 0
+
+    def test_current_task(self):
+        self.worker.put({'task': 'abc123'})
+        assert self.worker.current_task['task'] == 'abc123'
+
+    def test_quit(self):
+        self.worker.quit()
+        assert self.worker.queue.get() == 'QUIT'
+
+    def test_idle_busy(self):
+        assert self.worker.idle is True
+        assert self.worker.busy is False
+        self.worker.put({'task': 'abc123'})
+        assert self.worker.busy is True
+        assert self.worker.idle is False
 
 
 @pytest.mark.django_db

@@ -905,14 +905,11 @@ class BaseTask(object):
             if instance.cancel_flag:
                 instance = self.update_model(instance.pk, status='canceled')
             if instance.status != 'running':
-                if hasattr(settings, 'CELERY_UNIT_TEST'):
-                    return
-                else:
-                    # Stop the task chain and prevent starting the job if it has
-                    # already been canceled.
-                    instance = self.update_model(pk)
-                    status = instance.status
-                    raise RuntimeError('not starting %s task' % instance.status)
+                # Stop the task chain and prevent starting the job if it has
+                # already been canceled.
+                instance = self.update_model(pk)
+                status = instance.status
+                raise RuntimeError('not starting %s task' % instance.status)
 
             if not os.path.exists(settings.AWX_PROOT_BASE_PATH):
                 raise RuntimeError('AWX_PROOT_BASE_PATH=%s does not exist' % settings.AWX_PROOT_BASE_PATH)
@@ -1070,7 +1067,7 @@ class BaseTask(object):
 @task
 class RunJob(BaseTask):
     '''
-    Celery task to run a job using ansible-playbook.
+    Run a job using ansible-playbook.
     '''
 
     model = Job
@@ -2165,7 +2162,7 @@ class RunInventoryUpdate(BaseTask):
 @task
 class RunAdHocCommand(BaseTask):
     '''
-    Celery task to run an ad hoc command using ansible.
+    Run an ad hoc command using ansible.
     '''
 
     model = AdHocCommand

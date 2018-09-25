@@ -142,14 +142,6 @@ except ImportError:
 
 CLUSTER_HOST_ID = socket.gethostname()
 
-# Supervisor service name dictionary used for programatic restart
-SERVICE_NAME_DICT = {
-    "callback": "receiver",
-    "runworker": "channels",
-    "uwsgi": "uwsgi",
-    "daphne": "daphne",
-    "nginx": "nginx"}
-
 try:
     socket.gethostbyname('docker.for.mac.host.internal')
     os.environ['SDB_NOTIFY_HOST'] = 'docker.for.mac.host.internal'
