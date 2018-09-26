@@ -500,12 +500,18 @@ def handle_work_error(*args, **kwargs):
                 first_instance = instance
                 first_instance_type = each_task['type']
 
-            if not first_instance and not instance.cancel_flag:
+            if not instance.cancel_flag:
                 instance.status = 'failed'
                 instance.failed = True
                 if not instance.job_explanation:
-                    instance.job_explanation = 'Previous Task Failed: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}' % \
-                                               (first_instance_type, first_instance.name, first_instance.id)
+                    if instance is first_instance:
+                        instance.job_explanation += ' '.join((
+                            'Task was marked as running in Tower but was not present in',
+                            'the job queue, so it has been marked as failed.',
+                        ))
+                    else:
+                        instance.job_explanation = 'Previous Task Failed: {"job_type": "%s", "job_name": "%s", "job_id": "%s"}' % \
+                                                   (first_instance_type, first_instance.name, first_instance.id)
                 instance.save()
                 instance.websocket_emit_status("failed")
 
